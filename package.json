@@ -1,15 +1,15 @@
 {
   "name": "sf-debug-agent",
   "displayName": "Salesforce Debug Agent",
-  "description": "Read-only Salesforce debugging agent with autonomous investigation capabilities",
-  "version": "1.0.0",
+  "description": "Copilot-native Salesforce debugging agent — autonomous investigation via @sfdebug in VS Code Chat",
+  "version": "2.0.0",
   "publisher": "ai-aether",
   "repository": {
     "type": "git",
     "url": "https://github.com/Akatsuki-Enterprises/Bug-Resolution-Agent"
   },
   "engines": {
-    "vscode": "^1.94.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "AI",
@@ -21,12 +21,111 @@
     "ui",
     "workspace"
   ],
+  "extensionDependencies": [],
   "activationEvents": [
     "onStartupFinished",
+    "onChatParticipant:sfDebug.agent",
     "onView:sfDebug.chatView"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "sfDebug.agent",
+        "name": "sfdebug",
+        "fullName": "Salesforce Debug Agent",
+        "description": "Autonomously investigate and debug Salesforce issues",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "investigate",
+            "description": "Start a new investigation. Provide org, symptom, object, and record IDs."
+          },
+          {
+            "name": "approve",
+            "description": "Approve the current investigation plan and run it"
+          },
+          {
+            "name": "report",
+            "description": "Generate the full report bundle (BU, Tech Document, Client)"
+          },
+          {
+            "name": "reset",
+            "description": "Clear the current investigation and start fresh"
+          }
+        ]
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "sfDebug_runSfCommand",
+        "displayName": "Run SF CLI Command",
+        "modelDescription": "Run a read-only Salesforce CLI command (sf data query, sf apex run, sf project retrieve start). Never runs deploy or DML. Returns stdout of the command.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The full SF CLI command to execute, e.g. sf data query --query \"SELECT Id FROM Account LIMIT 1\" --json --target-org myOrg"
+            }
+          },
+          "required": ["command"]
+        },
+        "tags": ["salesforce", "cli", "query"]
+      },
+      {
+        "name": "sfDebug_writeFile",
+        "displayName": "Write File",
+        "modelDescription": "Write content to a file inside the workspace. Allowed paths: runtime/scripts/, runtime/agent_workspace/, runtime/Reports/. Use this to save SOQL scripts, findings, and the final reports.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative path, e.g. runtime/Reports/2025-01-15-login-issue/BU.md"
+            },
+            "content": {
+              "type": "string",
+              "description": "File content to write"
+            }
+          },
+          "required": ["path", "content"]
+        },
+        "tags": ["file", "write"]
+      },
+      {
+        "name": "sfDebug_readFile",
+        "displayName": "Read File",
+        "modelDescription": "Read the contents of a file from the workspace.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to the file"
+            }
+          },
+          "required": ["path"]
+        },
+        "tags": ["file", "read"]
+      },
+      {
+        "name": "sfDebug_listDir",
+        "displayName": "List Directory",
+        "modelDescription": "List the contents of a directory in the workspace.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute directory path"
+            }
+          },
+          "required": ["path"]
+        },
+        "tags": ["file", "directory"]
+      }
+    ],
     "viewsContainers": {
       "secondarySidebar": [
         {
@@ -59,33 +158,6 @@
         }
       ]
     },
-    "chatParticipants": [
-      {
-        "id": "sfDebug.agent",
-        "name": "sfdebug",
-        "fullName": "Salesforce Debug Agent",
-        "description": "Autonomously investigate and debug Salesforce issues",
-        "isSticky": true,
-        "commands": [
-          {
-            "name": "investigate",
-            "description": "Start a new investigation. Provide org, symptom, object, and record IDs."
-          },
-          {
-            "name": "approve",
-            "description": "Approve the current investigation plan and run it"
-          },
-          {
-            "name": "report",
-            "description": "Generate the full report bundle (BU, Tech Document, Client)"
-          },
-          {
-            "name": "reset",
-            "description": "Clear the current investigation and start fresh"
-          }
-        ]
-      }
-    ],
     "commands": [
       {
         "command": "sfDebug.configureApiKey",
@@ -127,7 +199,7 @@
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.10.6",
-    "@types/vscode": "^1.90.0",
+    "@types/vscode": "^1.99.0",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vscode/test-electron": "^2.3.8",

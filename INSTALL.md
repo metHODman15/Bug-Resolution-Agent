@@ -8,17 +8,23 @@ Step-by-step guide for installing and configuring the Salesforce Debug Agent ext
 
 ### Required
 
-✅ **VS Code** 1.90.0 or higher
+✅ **VS Code** 1.99.0 or higher
 - Download: https://code.visualstudio.com/
 - Check your version: **Help → About**
 
-✅ **GitHub Copilot Chat** extension
-- Install from the VS Code Marketplace: search **GitHub Copilot Chat**
-- This provides the Chat panel that `@sfdebug` lives inside — the same requirement as Claude Code or any other chat participant
+### Language Model (choose one)
 
-✅ **Anthropic API Key**
+✅ **GitHub Copilot** (recommended)
+- Install from the VS Code Marketplace: search **GitHub Copilot**
+- The extension will use your Copilot subscription to power the agent — **no API key needed**
+
+✅ **Anthropic API Key** (alternative)
 - Get one: https://console.anthropic.com/
 - Format: `sk-ant-...`
+
+✅ **Grok / xAI API Key** (alternative)
+- Get one: https://console.x.ai/
+- Format: `xai-...`
 
 ### Recommended
 
@@ -29,7 +35,7 @@ Step-by-step guide for installing and configuring the Salesforce Debug Agent ext
 ✅ **Authenticated Salesforce Org** — sandbox recommended
 - Authenticate: `sf org login web -a myOrg`
 
-> **No Python required.** The extension calls the Anthropic API directly — there is no local backend to install or manage.
+> **No Python required.** The extension calls the LLM API directly — there is no local backend to install or manage.
 
 ---
 
@@ -87,11 +93,19 @@ code --install-extension extension.vsix
 
 ## Post-Installation Setup
 
-### Step 1: Configure your Anthropic API Key
+### With GitHub Copilot (recommended — zero config)
+
+1. Ensure GitHub Copilot is installed and active
+2. Open the Chat panel (`Cmd+Ctrl+I` / `Ctrl+Alt+I`)
+3. Type `@sfdebug` followed by your issue — the agent uses your Copilot subscription automatically
+
+### Without Copilot (direct API key)
+
+#### Step 1: Configure your API Key
 
 1. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-2. Run: **SF Debug: Configure Anthropic API Key**
-3. Enter your key (`sk-ant-...`)
+2. Run: **SF Debug: Configure API Key**
+3. Enter your key (`sk-ant-...` for Anthropic or `xai-...` for Grok)
 
 The key is stored securely in VS Code's secret storage (macOS Keychain / Windows Credential Manager / Linux Secret Service). It is never written to disk.
 
@@ -143,13 +157,12 @@ Access via **File → Preferences → Settings → "SF Debug"**:
 ## Troubleshooting
 
 ### `@sfdebug` not appearing in Chat
-1. **GitHub Copilot Chat must be installed** — it provides the Chat panel. Install it from the Marketplace, then reload VS Code.
+1. **VS Code version** — Requires VS Code 1.99+. Check **Help → About**.
 2. **Uninstall the old VSIX first** — VS Code won't replace a stale install cleanly. Extensions panel → gear icon → Uninstall → reload → re-install the new `.vsix`.
-3. **VS Code version** — Chat participants require 1.90+. Check **Help → About**.
-4. If you see a red error popup on startup like "failed to register chat participant", it means step 1 above was missed.
+3. If you see a red error popup on startup like "failed to register chat participant", check VS Code version.
 
 ### Extension not appearing in Extensions panel
-- Check VS Code version (need 1.90.0+): **Help → About**
+- Check VS Code version (need 1.99.0+): **Help → About**
 - Try **Developer: Reload Window**
 
 ### API key fails to save
@@ -190,7 +203,8 @@ The API key is removed automatically when the extension is uninstalled.
 
 The extension makes outbound HTTPS calls to:
 
-- `https://api.anthropic.com` — AI plan generation and analysis
+- **With Copilot**: network calls are handled by the GitHub Copilot extension
+- **With direct API key**: `https://api.anthropic.com` or `https://api.x.ai/v1`
 - Your Salesforce org — CLI queries
 - `https://login.salesforce.com` — Salesforce auth
 
