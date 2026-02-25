@@ -71,9 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production org safeguards
 
 ### Notes
-- Requires VS Code 1.85.0 or higher
+- Requires VS Code 1.99.0 or higher
 - Requires Salesforce CLI for org operations
-- Requires Anthropic API key for AI features
+- Language model provided by Copilot subscription, or Anthropic / Grok API key
 - Tested with Claude Sonnet 4 model
 
 ## [Unreleased]
@@ -85,6 +85,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated regression testing
 - Integration with Salesforce DevOps Center
 - VS Code Marketplace publication
+
+## [2.0.0] - 2026-02-25
+
+### Added
+- **Copilot-Native Architecture** — extension now works like GitHub Copilot itself:
+  - `@sfdebug` chat participant is the **primary** interface
+  - Uses `vscode.lm.selectChatModels()` to leverage the user's Copilot subscription — **no API key required**
+  - Tools registered via `vscode.lm.registerTool()` so any VS Code Language Model can invoke them
+  - Tool calling via native `LanguageModelToolCallPart` / `LanguageModelToolResultPart` API
+- **Registered Language Model Tools**:
+  - `sfDebug_runSfCommand` — run read-only SF CLI commands
+  - `sfDebug_writeFile` — write files to allowed workspace paths
+  - `sfDebug_readFile` — read workspace files
+  - `sfDebug_listDir` — list directory contents
+- **VS Code LM Agent Loop** (`vscodeLmLoop.ts`) — agentic loop using VS Code's Language Model API with up to 20 iterations
+- **Chat Tool Implementations** (`chatTools.ts`) — `vscode.LanguageModelTool<T>` implementations for all 4 tools
+- New activation event: `onChatParticipant:sfDebug.agent`
+
+### Changed
+- **Primary interface** changed from sidebar webview to `@sfdebug` chat participant
+- Sidebar webview is now a **secondary/fallback** interface for users without Copilot
+- First-run prompt now checks for VS Code LM availability before suggesting API key setup
+- Participant tries VS Code LM first, falls back to direct Anthropic/Grok API if unavailable
+- Engine requirement bumped from `^1.94.0` to `^1.99.0` (for stable Language Model Tool API)
+- Version bumped to 2.0.0
+
+### Notes
+- Fully backward-compatible: direct Anthropic (`sk-ant-`) and Grok (`xai-`) API keys still work as fallback
+- Existing sidebar webview remains functional for non-Copilot users
 
 ---
 

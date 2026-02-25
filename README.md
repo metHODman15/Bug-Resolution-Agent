@@ -1,27 +1,39 @@
 # SF Debug Agent
 
-An AI-powered Salesforce debugging assistant for VS Code. Describe your issue in plain English — the agent autonomously runs SF CLI commands, reads and writes files, and produces BU, Technical, and Client reports.
+A **Copilot-native** Salesforce debugging agent for VS Code. Type `@sfdebug` in the Chat panel, describe your issue in plain English, and the agent autonomously investigates your Salesforce org — running SF CLI commands, analysing data, and producing reports.
 
 ## Features
 
+- 🚀 **Copilot-Native** — works inside VS Code's Chat panel, just like GitHub Copilot. No separate API key required when using a Copilot subscription.
 - 🤖 **Agentic Loop** — LLM autonomously plans and executes up to 20 tool calls per message
+- 🔧 **Registered VS Code Tools** — `sfDebug_runSfCommand`, `sfDebug_readFile`, `sfDebug_writeFile`, `sfDebug_listDir` are registered via `vscode.lm.registerTool()` so any language model can invoke them
 - 🔍 **SF CLI Integration** — runs `sf data query`, `sf apex run`, `sf project retrieve` on your behalf
 - 📊 **Auto-generated Reports** — BU, Technical, and Client `.md` reports written to `runtime/Reports/`
 - 🔒 **Safety Guardrails** — read-only CLI allowlist + write path protection (no deploys, no deletes)
-- 🧠 **Dual LLM Support** — Anthropic Claude (`sk-ant-` key) or Grok (`xai-` key)
+- 🧠 **Fallback LLM Support** — direct Anthropic Claude (`sk-ant-`) or Grok (`xai-`) keys when Copilot is unavailable
 - 💾 **Persistent Memory** — conversation history stored per workspace (80-message rolling window)
-- 🖼️ **Image Paste** — paste screenshots directly into the chat for visual context
-- 💬 **Copilot Chat Participant** — also available as `@sfdebug` in GitHub Copilot Chat
+- 🖼️ **Image Paste** — paste screenshots into the sidebar chat for visual context
 
 ## Getting Started
 
 ### Prerequisites
 
-- Salesforce CLI installed and authenticated (`sf org list`)
-- An API key from **Anthropic** (`sk-ant-...`) or **Grok / xAI** (`xai-...`)
-- VS Code 1.85.0 or higher
+- **VS Code 1.99.0** or higher
+- **Salesforce CLI** installed and authenticated (`sf org list`)
+- **One of** the following language model providers:
+  - ✅ **GitHub Copilot** subscription (recommended — no API key needed)
+  - ✅ **Anthropic API key** (`sk-ant-...`) — [console.anthropic.com](https://console.anthropic.com)
+  - ✅ **Grok / xAI API key** (`xai-...`) — [console.x.ai](https://console.x.ai)
 
 ### Initial Setup
+
+#### With GitHub Copilot (recommended)
+
+1. Install the extension
+2. Open the Chat panel (`Cmd+Ctrl+I` / `Ctrl+Alt+I`)
+3. Type `@sfdebug` and describe your issue — that's it!
+
+#### Without Copilot (direct API key)
 
 1. Install the extension
 2. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
@@ -30,12 +42,14 @@ An AI-powered Salesforce debugging assistant for VS Code. Describe your issue in
 
 ## Usage
 
-### Chat Panel
+### Primary: VS Code Chat Panel (`@sfdebug`)
 
-1. Open the **SF Debug** panel in the VS Code sidebar (or press `Cmd+Shift+P` → `SF Debug: Open Chat`)
-2. Type your Salesforce issue in plain English, for example:
+1. Open the Chat panel — click the chat icon in the Activity Bar, or press `Cmd+Ctrl+I` (macOS) / `Ctrl+Alt+I` (Windows/Linux)
+2. Type `@sfdebug` followed by your Salesforce issue in plain English:
 
-   > *"Users on the HQ2Prod org are getting a `FIELD_INTEGRITY_EXCEPTION` on Opportunity line items when the product family is 'Hardware'. Affects order IDs: 8013x000001abc, 8013x000001def"*
+   ```
+   @sfdebug Users on the HQ2Prod org are getting a FIELD_INTEGRITY_EXCEPTION on Opportunity line items when the product family is 'Hardware'. Affects order IDs: 8013x000001abc, 8013x000001def
+   ```
 
 3. The agent will autonomously:
    - Run SOQL queries to gather evidence
@@ -43,15 +57,11 @@ An AI-powered Salesforce debugging assistant for VS Code. Describe your issue in
    - Run Apex scripts if needed
    - Write BU, Technical, and Client reports to `runtime/Reports/`
 
-### GitHub Copilot Chat
-
-If you have GitHub Copilot Chat installed, mention `@sfdebug` in any chat:
-
-```
-@sfdebug Why are Opportunity line items failing validation on HQ2Prod?
-```
-
 Use `/reset` to clear the conversation history for the current workspace.
+
+### Secondary: Sidebar Chat Panel
+
+The sidebar webview is available for users without Copilot. It uses a direct Anthropic or Grok API key and supports image paste.
 
 ### Generated Reports
 
@@ -129,9 +139,11 @@ npm test
 
 ### Extension Not Activating
 
+- Verify VS Code 1.99+ is installed: **Help → About**
 - Verify Salesforce CLI is installed: `sf --version`
 - Verify org auth: `sf org list`
-- Confirm API key is set: run `SF Debug: Configure API Key`
+- If using direct API mode: run `SF Debug: Configure API Key`
+- If using Copilot mode: ensure GitHub Copilot is active
 
 ### Agent Blocked on Queries
 
