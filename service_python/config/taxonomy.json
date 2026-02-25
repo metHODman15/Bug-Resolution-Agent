@@ -1,0 +1,22 @@
+{
+  "business_jargon": {
+    "bad UX workflow": "Flow fails because criteria logic mismatched",
+    "sales process stuck": "Lead conversion blocked by validation rules",
+    "customer data not syncing": "Data integration failure between Salesforce and external system",
+    "report not loading": "SOQL query timeout or governor limits exceeded",
+    "user can't login": "Authentication failure due to permission sets or profiles",
+    "deal not closing": "Opportunity stage progression blocked by approval processes",
+    "system slow": "Performance degradation due to inefficient queries or large data volumes",
+    "data inconsistency": "Record synchronization issues between objects",
+    "automation not working": "Process Builder or Flow execution errors",
+    "permissions issue": "Sharing rules or field-level security restrictions"
+  },
+  "synonyms": {
+    "bug": ["issue", "problem", "error", "defect", "glitch"],
+    "workflow": ["process", "flow", "automation", "sequence"],
+    "data": ["information", "records", "fields", "content"],
+    "user": ["person", "employee", "customer", "stakeholder"],
+    "system": ["platform", "application", "org", "instance"],
+    "performance": ["speed", "efficiency", "response time", "latency"]
+  }
+}

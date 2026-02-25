@@ -1,0 +1,144 @@
+{
+  "name": "sf-debug-agent",
+  "displayName": "Salesforce Debug Agent",
+  "description": "Read-only Salesforce debugging agent with autonomous investigation capabilities",
+  "version": "1.0.0",
+  "publisher": "ai-aether",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Akatsuki-Enterprises/Bug-Resolution-Agent"
+  },
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Debuggers",
+    "Other"
+  ],
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:sfDebug.chatView"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "sf-debug-sidebar",
+          "title": "SF Debug Agent",
+          "icon": "resources/sf-debug-icon.svg"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "sf-debug-activitybar",
+          "title": "SF Debug Agent",
+          "icon": "resources/sf-debug-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sf-debug-sidebar": [
+        {
+          "type": "webview",
+          "id": "sfDebug.chatView",
+          "name": "SF Debug Agent"
+        }
+      ],
+      "sf-debug-activitybar": [
+        {
+          "type": "webview",
+          "id": "sfDebug.chatView.activity",
+          "name": "SF Debug Agent"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "sfDebug.agent",
+        "name": "sfdebug",
+        "fullName": "Salesforce Debug Agent",
+        "description": "Autonomously investigate and debug Salesforce issues",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "investigate",
+            "description": "Start a new investigation. Provide org, symptom, object, and record IDs."
+          },
+          {
+            "name": "approve",
+            "description": "Approve the current investigation plan and run it"
+          },
+          {
+            "name": "report",
+            "description": "Generate the full report bundle (BU, Tech Document, Client)"
+          },
+          {
+            "name": "reset",
+            "description": "Clear the current investigation and start fresh"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "sfDebug.configureApiKey",
+        "title": "Configure API Key",
+        "category": "SF Debug"
+      }
+    ],
+    "configuration": {
+      "title": "Salesforce Debug Agent",
+      "properties": {
+        "sfDebug.defaultOrgAlias": {
+          "type": "string",
+          "default": "",
+          "description": "Default Salesforce org alias for investigations"
+        },
+        "sfDebug.maxRetryAttempts": {
+          "type": "number",
+          "default": 2,
+          "description": "Maximum retry attempts before triggering loop-breaker"
+        },
+        "sfDebug.enableWebSearch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable web search when loop-breaker is triggered"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint extension/src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package:vsix": "npx vsce package -o extension.vsix"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.6",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-electron": "^2.3.8",
+    "eslint": "^8.56.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3",
+    "vsce": "^2.12.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "openai": "^6.25.0"
+  }
+}

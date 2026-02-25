@@ -1,0 +1,27 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "editor.formatOnSave": true,
+    "files.exclude": {
+      "**/.git": true,
+      "**/node_modules": true,
+      "**/out": true,
+      "**/runtime": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/out": true,
+      "**/runtime": true
+    },
+    "files.watcherExclude": {
+      "**/node_modules/**": true,
+      "**/out/**": true,
+      "**/runtime/**": true
+    }
+  }
+}

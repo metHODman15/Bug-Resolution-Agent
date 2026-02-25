@@ -1,0 +1,16 @@
+-- Object Permissions Query Template
+-- Use this to check create, read, edit, delete permissions for users
+
+SELECT 
+    Id,
+    Parent.Profile.Name,
+    SobjectType,
+    PermissionsCreate,
+    PermissionsRead,
+    PermissionsEdit,
+    PermissionsDelete,
+    PermissionsViewAllRecords,
+    PermissionsModifyAllRecords
+FROM ObjectPermissions
+WHERE SobjectType = 'Account'
+ORDER BY Parent.Profile.Name

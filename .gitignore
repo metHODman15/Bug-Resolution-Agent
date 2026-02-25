@@ -1,0 +1,30 @@
+# Runtime generated content (investigations, reports, scripts)
+runtime/
+
+# Node modules
+node_modules/
+
+# Compiled output
+out/
+dist/
+
+# VS Code test files
+.vscode-test/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# API keys and secrets
+.env
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,14 @@
+{
+  "investigation": {
+    "template": "Investigate the following Salesforce issue: {normalized_issue}\n\nContext: {context}\n\nProvide a step-by-step analysis focusing on:\n1. Root cause identification\n2. Impact assessment\n3. Technical details\n4. Recommended next steps",
+    "max_tokens": 1000
+  },
+  "summary": {
+    "template": "Summarize the following investigation results: {results}\n\nKey findings: {findings}\n\nProvide a concise executive summary with action items.",
+    "max_tokens": 500
+  },
+  "resolution": {
+    "template": "Based on the analysis: {analysis}\n\nSuggest resolutions for: {issue}\n\nPrioritize solutions by:\n1. Implementation complexity\n2. Expected impact\n3. Risk level\n4. Required resources",
+    "max_tokens": 800
+  }
+}

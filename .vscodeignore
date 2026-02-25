@@ -1,0 +1,16 @@
+.vscode/**
+.vscode-test/**
+extension/src/**
+.gitignore
+.eslintrc.json
+tsconfig.json
+**/*.ts
+**/*.map
+runtime/**
+.github/**
+BUILD.md
+USE.md
+**/.pytest_cache/**
+**/__pycache__/**
+service_python/tests/**
+service_python/.pytest_cache/**
