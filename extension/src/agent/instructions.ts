@@ -1,13 +1,14 @@
 /**
- * Agent instructions — loaded from copilot-reference-mds/ at runtime.
+ * Agent instructions — loaded from .github/ markdown files at runtime.
  *
- * HOW TO CUSTOMISE FOR EACH DEPLOYMENT:
- *   1. Edit  copilot-reference-mds/copilot-instructions.md  (investigation rules, report format)
- *   2. Edit  copilot-reference-mds/AGENTS.md               (agent persona and capabilities)
- *   3. Run   npm run package:vsix
- *   4. Distribute extension.vsix — each recipient enters their own Anthropic API key.
+ * The extension reads these repo-controlled markdown files:
+ *   - .github/AGENTS.md
+ *   - .github/copilot-instructions.md
  *
- * The two markdown files are bundled inside the VSIX and read synchronously on first use.
+ * Precedence: hardcoded system policy > AGENTS.md > copilot-instructions.md
+ *
+ * For the full structured parser, see markdownParser.ts.
+ * This module provides backward-compatible named exports for existing callers.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -23,44 +24,32 @@ function loadMd(relativePath: string): string {
     }
 }
 
-let _system: string | undefined;
-let _analysis: string | undefined;
+let cachedSystem: string | undefined;
+let cachedAnalysis: string | undefined;
 
 export function getSystemInstructions(): string {
-    if (!_system) {
-        const agents       = loadMd('copilot-reference-mds/AGENTS.md');
-        const instructions = loadMd('copilot-reference-mds/copilot-instructions.md');
-        _system =
+    if (!cachedSystem) {
+        const agents       = loadMd('.github/AGENTS.md');
+        const instructions = loadMd('.github/copilot-instructions.md');
+        cachedSystem =
             agents + '\n\n---\n\n' + instructions + '\n\n---\n\n' +
             '## Runtime context\n\n' +
-            '- The org alias is auto-detected from the active SF CLI connection; do NOT ask the user for it.\n' +
-            '- Do NOT demand object names or record IDs upfront; ask only if you genuinely cannot proceed.\n' +
-            '- The user only needs to describe the symptom in plain English.\n' +
-            '- Produce your investigation plan as a JSON array inside a ```json code block.\n' +
-            '- Each step: { "type": "query"|"retrieve"|"apex"|"analysis", "description": "...", "command"?: "...", "filePath"?: "..." }\n';
+            '- The workspace root is auto-detected from the active VS Code workspace.\n' +
+            '- The user only needs to describe what to build next.\n';
     }
-    return _system;
+    return cachedSystem;
 }
 
 export function getAnalysisInstructions(): string {
-    if (!_analysis) {
-        const agents = loadMd('copilot-reference-mds/AGENTS.md');
-        _analysis =
+    if (!cachedAnalysis) {
+        const agents = loadMd('.github/AGENTS.md');
+        cachedAnalysis =
             agents + '\n\n---\n\n' +
             '## Analysis task\n\n' +
-            'Analyse the Salesforce investigation results provided.\n' +
-            'Classify the root cause: data-quality issue, configuration/automation defect, or both.\n\n' +
-            'Provide structured markdown with Root Cause, Explanation, Affected Records, Recommended Actions.\n\n' +
-            'Then output a JSON block:\n' +
-            '```json\n' +
-            '{ "primaryCause": "data|system|configuration|permission|unknown",\n' +
-            '  "confidence": "high|medium|low",\n' +
-            '  "explanation": "...",\n' +
-            '  "affectedRecords": [...],\n' +
-            '  "recommendedActions": [...] }\n' +
-            '```';
+            'Analyse the results provided.\n' +
+            'Classify the root cause and provide structured markdown.\n';
     }
-    return _analysis;
+    return cachedAnalysis;
 }
 
 // Legacy named exports kept so existing callers compile without changes
