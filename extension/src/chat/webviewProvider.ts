@@ -1,122 +1,175 @@
 /**
- * SF Debug Agent — WebviewView provider
- * Architecture: pure agentic chat loop (identical to GitHub Copilot).
- *   - LLM drives everything through tool calls
- *   - Conversation history persists per workspace via ConversationMemory
- *   - Reports are written by the LLM using write_file tool
+ * Build Agent — WebviewView provider (white-label, repo-driven).
+ *
+ * UI rules:
+ *  - "Build with Agent" empty state with disclaimer
+ *  - Agent selector loaded from .github/AGENTS.md
+ *  - 2 past conversation previews (not clickable, not resumable)
+ *  - No user-facing settings or prompt leakage
+ *  - Ephemeral current session (fresh on reload)
  */
 import * as vscode from 'vscode';
 import { detectProvider } from '../services/llmClient';
-import { getSystemInstructions } from '../agent/instructions';
-import { SfCliRunner } from '../agent/execution/sfCliRunner';
 import { ConversationMemory } from '../agent/memory/conversationMemory';
 import { runAgentLoop, StoredMessage } from '../agent/tools/toolEngine';
+import { ConfigWatcher } from '../agent/configWatcher';
+import { HistoryManager } from '../agent/historyManager';
 
 function uid(): string {
     return 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
 }
 
-export class SfDebugWebviewProvider implements vscode.WebviewViewProvider {
-    static readonly viewType = 'sfDebug.chatView';
+export class AgentWebviewProvider implements vscode.WebviewViewProvider {
+    static readonly viewType = 'buildAgent.chatView';
 
-    private _view?: vscode.WebviewView;
-    private _busy  = false;
-    private _memory: ConversationMemory;
+    private view?: vscode.WebviewView;
+    private busy  = false;
+    private memory: ConversationMemory;
+    private firstUserMsg = '';
+    private firstAssistantMsg = '';
 
     constructor(
-        private readonly _extUri:  vscode.Uri,
-        private readonly _extCtx:  vscode.ExtensionContext,
-        _state?: unknown,
+        private readonly extUri:  vscode.Uri,
+        private readonly extCtx:  vscode.ExtensionContext,
+        private readonly configWatcher: ConfigWatcher,
+        private readonly historyManager: HistoryManager,
     ) {
-        this._memory = new ConversationMemory(_extCtx);
+        this.memory = new ConversationMemory(extCtx);
+
+        // React to config changes
+        configWatcher.onConfigChanged(() => {
+            this.sendAgentList();
+        });
     }
 
     resolveWebviewView(
-        view: vscode.WebviewView,
+        webviewView: vscode.WebviewView,
         _ctx: vscode.WebviewViewResolveContext,
         _tok: vscode.CancellationToken,
     ): void {
-        this._view = view;
-        view.webview.options = { enableScripts: true };
-        view.webview.onDidReceiveMessage(async (msg: Record<string, unknown>) => {
-            try   { await this._handle(msg); }
+        this.view = webviewView;
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.onDidReceiveMessage(async (msg: Record<string, unknown>) => {
+            try   { await this.handleMessage(msg); }
             catch (e) {
-                this._busy = false;
-                this._post({ type: 'error', text: e instanceof Error ? e.message : String(e) });
+                this.busy = false;
+                this.post({ type: 'error', text: e instanceof Error ? e.message : String(e) });
             }
         });
-        view.webview.html = this._html();
+        webviewView.webview.html = this.buildHtml();
     }
 
-    async notifyKeyUpdated(): Promise<void> {
-        const key = await this._getKey();
-        if (key) { this._post({ type: 'keySet', provider: detectProvider(key) }); }
+    /** Trigger a new chat session from a command. */
+    startNewChat(): void {
+        this.archiveCurrentSession();
+        this.memory.clear();
+        this.firstUserMsg = '';
+        this.firstAssistantMsg = '';
+        this.post({ type: 'reset' });
+        this.sendPreviews();
     }
 
-    private async _getKey(): Promise<string | undefined> {
-        return await this._extCtx.secrets.get('llm-api-key')
-            ?? await this._extCtx.secrets.get('anthropic-api-key');
+    /* ── private ─────────────────────────────────────────────────────────────── */
+
+    private async getKey(): Promise<string | undefined> {
+        return await this.extCtx.secrets.get('llm-api-key')
+            ?? await this.extCtx.secrets.get('anthropic-api-key');
     }
 
-    private _post(msg: object): void {
-        this._view?.webview.postMessage(msg);
+    private post(msg: object): void {
+        this.view?.webview.postMessage(msg);
     }
 
-    private async _handle(msg: Record<string, unknown>): Promise<void> {
+    private async handleMessage(msg: Record<string, unknown>): Promise<void> {
         switch (msg.type) {
-            case 'init':   return this._sendInit();
-            case 'setKey': return this._setKey(String(msg.key ?? ''));
-            case 'send':   return this._chat(
+            case 'init':   return this.sendInit();
+            case 'setKey': return this.setKey(String(msg.key ?? ''));
+            case 'send':   return this.chat(
                 String(msg.text ?? '').trim(),
                 msg.images as string[] | undefined,
             );
-            case 'reset':
-                await this._memory.clear();
-                this._busy = false;
-                this._post({ type: 'reset' });
+            case 'newChat':
+                this.startNewChat();
+                return;
+            case 'generateTemplates':
+                await vscode.commands.executeCommand('buildAgent.generateTemplates');
+                this.sendInit();
                 return;
         }
     }
 
-    private async _sendInit(): Promise<void> {
-        const key   = await this._getKey();
-        const count = this._memory.count();
-        this._post({ type: 'init', hasKey: !!key, historyCount: count });
+    private async sendInit(): Promise<void> {
+        const key = await this.getKey();
+        const previews = this.historyManager.getPreviews();
+        const { agentsExists, instructionsExists } = this.configWatcher.filesExist();
+        const agents = this.configWatcher.getConfig().agents.map(a => a.name);
+        this.post({
+            type: 'init',
+            hasKey: !!key,
+            previews,
+            agents,
+            filesExist: agentsExists && instructionsExists,
+        });
     }
 
-    private async _setKey(key: string): Promise<void> {
+    private sendPreviews(): void {
+        const previews = this.historyManager.getPreviews();
+        this.post({ type: 'previews', previews });
+    }
+
+    private sendAgentList(): void {
+        const agents = this.configWatcher.getConfig().agents.map(a => a.name);
+        this.post({ type: 'agents', agents });
+    }
+
+    private async setKey(key: string): Promise<void> {
         if (!key || (!key.startsWith('sk-ant-') && !key.startsWith('xai-'))) {
-            this._post({ type: 'keyError', text: 'Invalid key — must start with sk-ant- (Anthropic) or xai- (Grok)' });
+            this.post({ type: 'keyError', text: 'Invalid key — must start with sk-ant- (Anthropic) or xai- (Grok)' });
             return;
         }
-        await this._extCtx.secrets.store('llm-api-key', key);
-        this._post({ type: 'keySet', provider: detectProvider(key) });
+        await this.extCtx.secrets.store('llm-api-key', key);
+        this.post({ type: 'keySet', provider: detectProvider(key) });
     }
 
-    private async _chat(text: string, images?: string[]): Promise<void> {
-        if ((!text && !images?.length) || this._busy) { return; }
+    private async archiveCurrentSession(): Promise<void> {
+        if (this.firstUserMsg && this.firstAssistantMsg) {
+            await this.historyManager.archiveSession(this.firstUserMsg, this.firstAssistantMsg);
+        }
+    }
 
-        const key = await this._getKey();
-        if (!key) { this._post({ type: 'noKey' }); return; }
+    private async chat(text: string, images?: string[]): Promise<void> {
+        if ((!text && !images?.length) || this.busy) { return; }
+
+        // Workspace trust gate
+        if (!vscode.workspace.isTrusted) {
+            this.post({ type: 'error', text: 'Workspace is not trusted. Agent actions are restricted.' });
+            return;
+        }
+
+        const key = await this.getKey();
+        if (!key) { this.post({ type: 'noKey' }); return; }
 
         const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!wsRoot) {
-            this._post({ type: 'error', text: 'No workspace folder is open.' });
+            this.post({ type: 'error', text: 'No workspace folder is open.' });
             return;
         }
 
-        const orgAlias = await SfCliRunner.detectDefaultOrg();
-        const orgLine  = orgAlias
-            ? '\n\n**Connected Salesforce org:** `' + orgAlias + '` (auto-detected)\n**Workspace root:** `' + wsRoot + '`'
-            : '\n\n**Connected Salesforce org:** not detected\n**Workspace root:** `' + wsRoot + '`';
+        const config = this.configWatcher.getConfig();
+        const systemPrompt = config.systemPrompt +
+            '\n\n**Workspace root:** `' + wsRoot + '`';
+        const history = this.memory.load() as StoredMessage[];
+        const msgId = uid();
 
-        const systemPrompt = getSystemInstructions() + orgLine;
-        const history      = this._memory.load() as StoredMessage[];
-        const msgId        = uid();
+        // Track first user message for archive
+        if (!this.firstUserMsg) {
+            this.firstUserMsg = text;
+        }
 
-        this._post({ type: 'streamStart', id: msgId });
-        this._busy = true;
+        this.post({ type: 'streamStart', id: msgId });
+        this.busy = true;
 
+        let assistantAccum = '';
         try {
             const { updatedHistory } = await runAgentLoop(
                 key,
@@ -125,36 +178,56 @@ export class SfDebugWebviewProvider implements vscode.WebviewViewProvider {
                 text,
                 images ?? [],
                 wsRoot,
-                (chunk) => this._post({ type: 'streamChunk', id: msgId, text: chunk }),
+                (chunk) => {
+                    this.post({ type: 'streamChunk', id: msgId, text: chunk });
+                    assistantAccum += chunk;
+                },
                 (name, input) => {
-                    const label = name === 'run_sf_command'
-                        ? 'Running: ' + String(input.command ?? '').slice(0, 80)
-                        : name === 'write_file'
+                    const label = name === 'write_file'
                         ? 'Writing: ' + String(input.path ?? '')
                         : name === 'read_file'
                         ? 'Reading: ' + String(input.path ?? '')
                         : 'Tool: ' + name;
-                    this._post({ type: 'toolCall', text: label });
+                    this.post({ type: 'toolCall', text: label });
                 },
                 (_name, result) => {
-                    this._post({ type: 'toolResult', text: result.slice(0, 120).replace(/\n/g, ' ') });
+                    this.post({ type: 'toolResult', text: result.slice(0, 120).replace(/\n/g, ' ') });
                 },
             );
-            await this._memory.save(updatedHistory);
-            this._post({ type: 'streamEnd', id: msgId });
+            await this.memory.save(updatedHistory);
+            // Store first full assistant response for archive preview
+            if (!this.firstAssistantMsg && assistantAccum) {
+                this.firstAssistantMsg = assistantAccum;
+            }
+            this.post({ type: 'streamEnd', id: msgId });
         } catch (e) {
-            this._post({ type: 'streamEnd', id: msgId });
+            this.post({ type: 'streamEnd', id: msgId });
             throw e;
         } finally {
-            this._busy = false;
+            this.busy = false;
         }
     }
 
     // ── HTML ──────────────────────────────────────────────────────────────────
 
-    private _html(): string {
+    private buildHtml(): string {
         const css = `*{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--vscode-sideBar-background);color:var(--vscode-foreground);font-family:var(--vscode-font-family);font-size:var(--vscode-font-size,13px);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#top-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--vscode-panel-border,rgba(128,128,128,.2));flex-shrink:0}
+#top-bar .title{font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+#top-bar .actions{display:flex;gap:6px}
+#top-bar .actions button{background:none;border:none;color:var(--vscode-foreground);cursor:pointer;font-size:14px;padding:2px 4px;opacity:.6}
+#top-bar .actions button:hover{opacity:1}
+#previews{padding:6px 12px;flex-shrink:0}
+.preview-item{padding:5px 8px;margin-bottom:4px;border-radius:4px;background:var(--vscode-list-hoverBackground,rgba(128,128,128,.06));cursor:default;pointer-events:none;user-select:none}
+.preview-item .p-title{font-size:11px;font-weight:600;opacity:.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview-item .p-time{font-size:9px;opacity:.35}
+.preview-item .p-snippet{font-size:10px;opacity:.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+#empty-state .icon{font-size:48px;margin-bottom:12px;opacity:.3}
+#empty-state .headline{font-size:16px;font-weight:700;margin-bottom:6px}
+#empty-state .disclaimer{font-size:11px;opacity:.45;margin-bottom:16px}
+#empty-state .action-link{color:var(--vscode-textLink-foreground);font-size:12px;cursor:pointer;text-decoration:underline}
 #key-banner{background:var(--vscode-editorInfo-background,rgba(0,122,204,.12));border-bottom:1px solid var(--vscode-editorInfo-border,rgba(0,122,204,.4));padding:14px;flex-shrink:0}
 #key-banner .bhead{font-weight:600;font-size:12px;margin-bottom:5px}
 #key-banner .bdesc{font-size:11px;opacity:.75;margin-bottom:10px;line-height:1.5}
@@ -194,13 +267,11 @@ strong{font-weight:600}em{font-style:italic}li{margin-left:16px;margin-bottom:2p
 .hidden{display:none!important}
 #input-area{border-top:1px solid var(--vscode-panel-border,rgba(128,128,128,.2));padding:10px 12px;flex-shrink:0}
 .input-row{display:flex;gap:6px;align-items:flex-end}
+#agent-selector{background:var(--vscode-dropdown-background,var(--vscode-input-background));color:var(--vscode-dropdown-foreground,var(--vscode-input-foreground));border:1px solid var(--vscode-dropdown-border,var(--vscode-input-border,transparent));border-radius:3px;padding:4px 6px;font-size:11px;margin-bottom:6px;width:100%;outline:none}
 #inp{flex:1;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,transparent);border-radius:4px;padding:7px 10px;font-family:inherit;font-size:inherit;resize:none;min-height:35px;max-height:110px;overflow-y:auto;outline:none;line-height:1.4}
 #inp:focus{border-color:var(--vscode-focusBorder)}#inp::placeholder{opacity:.5}#inp:disabled{opacity:.5}
 #sbtn{background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;border-radius:4px;width:35px;height:35px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-#sbtn:hover{background:var(--vscode-button-hoverBackground)}#sbtn:disabled{opacity:.4;cursor:default}
-#hist-bar{display:flex;justify-content:space-between;align-items:center;padding:4px 12px;font-size:10px;opacity:.6;flex-shrink:0;border-bottom:1px solid var(--vscode-panel-border,rgba(128,128,128,.15))}
-#hist-bar button{background:none;border:none;color:var(--vscode-textLink-foreground);font-size:10px;cursor:pointer;padding:0}
-#hist-bar button:hover{text-decoration:underline}`;
+#sbtn:hover{background:var(--vscode-button-hoverBackground)}#sbtn:disabled{opacity:.4;cursor:default}`;
 
         const js = `(function(){
 var vscode=acquireVsCodeApi();
@@ -212,26 +283,39 @@ var keyErr=document.getElementById("key-err");
 var inpEl=document.getElementById("inp");
 var sBtn=document.getElementById("sbtn");
 var imgStrip=document.getElementById("img-strip");
-var histBar=document.getElementById("hist-bar");
-var histLabel=document.getElementById("hist-label");
-var histClear=document.getElementById("hist-clear");
-var busy=false,pendingImages=[],toolCallEl=null;
+var emptyState=document.getElementById("empty-state");
+var previewsEl=document.getElementById("previews");
+var agentSel=document.getElementById("agent-selector");
+var actionLink=document.getElementById("action-link");
+var newChatBtn=document.getElementById("new-chat-btn");
+var busy=false,pendingImages=[],toolCallEl=null,chatStarted=false;
 
 window.addEventListener("message",function(ev){
   var m=ev.data;
   if(m.type==="init"){
-    if(m.hasKey){keyBnr.classList.add("hidden");showHistBar(m.historyCount||0);if(!(m.historyCount>0))welcome();}
-    else keyBnr.classList.remove("hidden");
+    if(m.hasKey){keyBnr.classList.add("hidden");}
+    else{keyBnr.classList.remove("hidden");}
+    renderPreviews(m.previews||[]);
+    renderAgents(m.agents||[]);
+    if(m.filesExist){
+      actionLink.textContent="Managed by your organization";
+      actionLink.style.cursor="default";
+      actionLink.style.textDecoration="none";
+    }else{
+      actionLink.textContent="Generate Agent Instructions\\u2026";
+      actionLink.style.cursor="pointer";
+      actionLink.style.textDecoration="underline";
+    }
+    if(!chatStarted)showEmpty();
   }else if(m.type==="keySet"){
     keyBnr.classList.add("hidden");keyErr.textContent="";
-    addSys("API key saved ("+(m.provider==="grok"?"Grok":"Anthropic")+"). Describe your Salesforce issue to start.");
-    showHistBar(0);
+    addSys("API key saved. Describe what to build next.");
   }else if(m.type==="keyError"){
     keyErr.textContent=m.text;
   }else if(m.type==="noKey"){
     keyBnr.classList.remove("hidden");
   }else if(m.type==="streamStart"){
-    busy=true;lock(true);addAgent("",m.id,true);
+    busy=true;chatStarted=true;hideEmpty();lock(true);addAgent("",m.id,true);
   }else if(m.type==="streamChunk"){
     appendChunk(m.id,m.text);
   }else if(m.type==="streamEnd"){
@@ -240,13 +324,14 @@ window.addEventListener("message",function(ev){
     addToolCall(m.text);
   }else if(m.type==="toolResult"){
     dismissToolCall();
-  }else if(m.type==="sys"){
-    addSys(m.text);
+  }else if(m.type==="previews"){
+    renderPreviews(m.previews||[]);
+  }else if(m.type==="agents"){
+    renderAgents(m.agents||[]);
   }else if(m.type==="error"){
     busy=false;lock(false);dismissToolCall();addErr(m.text);
   }else if(m.type==="reset"){
-    msgsEl.innerHTML="";busy=false;lock(false);showHistBar(0);
-    addSys("History cleared. Describe your Salesforce issue to begin.");
+    msgsEl.innerHTML="";busy=false;lock(false);chatStarted=false;showEmpty();
   }
 });
 
@@ -256,6 +341,7 @@ function send(){
   var t=inpEl.value.trim();
   if((!t&&pendingImages.length===0)||busy)return;
   var imgs=pendingImages.map(function(p){return p.dataUrl;});
+  chatStarted=true;hideEmpty();
   addUser(t,imgs);
   vscode.postMessage({type:"send",text:t,images:imgs});
   inpEl.value="";pendingImages=[];clearImageStrip();resize();
@@ -299,11 +385,36 @@ function clearImageStrip(){imgStrip.innerHTML="";imgStrip.classList.add("hidden"
 keySave.addEventListener("click",function(){keyErr.textContent="";vscode.postMessage({type:"setKey",key:keyInp.value.trim()});});
 keyInp.addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();keySave.click();}});
 
-histClear.addEventListener("click",function(){vscode.postMessage({type:"reset"});});
-function showHistBar(count){
-  if(count>0){histBar.classList.remove("hidden");histLabel.textContent=count+" message"+(count===1?"":"s")+" in memory";}
-  else histBar.classList.add("hidden");
+newChatBtn.addEventListener("click",function(){vscode.postMessage({type:"newChat"});});
+actionLink.addEventListener("click",function(){vscode.postMessage({type:"generateTemplates"});});
+
+function renderPreviews(list){
+  previewsEl.innerHTML="";
+  if(!list||list.length===0){previewsEl.classList.add("hidden");return;}
+  previewsEl.classList.remove("hidden");
+  list.forEach(function(p){
+    var el=document.createElement("div");el.className="preview-item";
+    var t=document.createElement("div");t.className="p-title";t.textContent=p.title;
+    var ts=document.createElement("div");ts.className="p-time";ts.textContent=new Date(p.timestamp).toLocaleString();
+    var sn=document.createElement("div");sn.className="p-snippet";sn.textContent=p.snippet;
+    el.appendChild(t);el.appendChild(ts);el.appendChild(sn);previewsEl.appendChild(el);
+  });
 }
+
+function renderAgents(list){
+  agentSel.innerHTML="";
+  if(!list||list.length===0){
+    var op=document.createElement("option");op.value="default";op.textContent="Agent";
+    agentSel.appendChild(op);return;
+  }
+  list.forEach(function(name){
+    var op=document.createElement("option");op.value=name;op.textContent=name;
+    agentSel.appendChild(op);
+  });
+}
+
+function showEmpty(){emptyState.classList.remove("hidden");msgsEl.classList.add("hidden");}
+function hideEmpty(){emptyState.classList.add("hidden");msgsEl.classList.remove("hidden");}
 
 function resize(){inpEl.style.height="auto";inpEl.style.height=Math.min(inpEl.scrollHeight,110)+"px";}
 function lock(on){sBtn.disabled=on;inpEl.disabled=on;if(!on)inpEl.focus();}
@@ -345,7 +456,7 @@ function addUser(text,imgs){
 }
 function addAgent(text,id,streaming){
   var el=document.createElement("div");el.className="msg agent";el.id=id;
-  var lbl=document.createElement("div");lbl.className="lbl";lbl.textContent="SF Debug Agent";
+  var lbl=document.createElement("div");lbl.className="lbl";lbl.textContent="Agent";
   var body=document.createElement("div");
   body.className="body"+(streaming?" cursor":"");
   body.setAttribute("data-raw",text);body.innerHTML=text?md(text):"";
@@ -385,10 +496,6 @@ function finalise(id){
   body.classList.remove("cursor");
   body.innerHTML=md(body.getAttribute("data-raw")||"");scroll();
 }
-function welcome(){
-  if(msgsEl.children.length>0)return;
-  addSys("Welcome to SF Debug Agent. Describe your Salesforce issue \\u2014 I will query the org, analyse the data, and generate the investigation reports automatically.");
-}
 })();`;
 
         return '<!DOCTYPE html>' +
@@ -399,6 +506,19 @@ function welcome(){
             '<meta name="viewport" content="width=device-width,initial-scale=1">' +
             '<style>' + css + '</style>' +
             '</head><body>' +
+
+            // Top bar
+            '<div id="top-bar">' +
+            '  <span class="title">CHAT</span>' +
+            '  <div class="actions">' +
+            '    <button id="new-chat-btn" title="New Chat">+</button>' +
+            '  </div>' +
+            '</div>' +
+
+            // Past conversation previews (max 2, non-clickable)
+            '<div id="previews" class="hidden"></div>' +
+
+            // Key banner (hidden by default)
             '<div id="key-banner" class="hidden">' +
             '  <div class="bhead">&#128273; Configure API Key</div>' +
             '  <div class="bdesc"><strong>Anthropic</strong>: console.anthropic.com &nbsp;|&nbsp; <strong>Grok</strong>: console.x.ai</div>' +
@@ -408,15 +528,24 @@ function welcome(){
             '  </div>' +
             '  <div id="key-err"></div>' +
             '</div>' +
-            '<div id="hist-bar" class="hidden">' +
-            '  <span id="hist-label">0 messages in memory</span>' +
-            '  <button id="hist-clear">Clear history</button>' +
+
+            // Empty state
+            '<div id="empty-state">' +
+            '  <div class="icon">&#129302;</div>' +
+            '  <div class="headline">Build with Agent</div>' +
+            '  <div class="disclaimer">AI-generated content may be incorrect.</div>' +
+            '  <div id="action-link" class="action-link">Generate Agent Instructions\u2026</div>' +
             '</div>' +
-            '<div id="msgs"></div>' +
+
+            // Messages area
+            '<div id="msgs" class="hidden"></div>' +
             '<div id="img-strip" class="hidden"></div>' +
+
+            // Input area
             '<div id="input-area">' +
+            '  <select id="agent-selector"><option value="default">Agent</option></select>' +
             '  <div class="input-row">' +
-            '    <textarea id="inp" rows="1" placeholder="Describe your Salesforce issue..." spellcheck="true"></textarea>' +
+            '    <textarea id="inp" rows="1" placeholder="Describe what to build next" spellcheck="true"></textarea>' +
             '    <button id="sbtn" title="Send (Enter)"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 14.5l13-6.5-13-6.5v5l9 1.5-9 1.5z"/></svg></button>' +
             '  </div>' +
             '</div>' +
