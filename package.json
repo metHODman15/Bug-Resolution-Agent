@@ -69,9 +69,15 @@
               "description": "The full SF CLI command to execute, e.g. sf data query --query \"SELECT Id FROM Account LIMIT 1\" --json --target-org myOrg"
             }
           },
-          "required": ["command"]
+          "required": [
+            "command"
+          ]
         },
-        "tags": ["salesforce", "cli", "query"]
+        "tags": [
+          "salesforce",
+          "cli",
+          "query"
+        ]
       },
       {
         "name": "sfDebug_writeFile",
@@ -89,9 +95,15 @@
               "description": "File content to write"
             }
           },
-          "required": ["path", "content"]
+          "required": [
+            "path",
+            "content"
+          ]
         },
-        "tags": ["file", "write"]
+        "tags": [
+          "file",
+          "write"
+        ]
       },
       {
         "name": "sfDebug_readFile",
@@ -105,9 +117,14 @@
               "description": "Workspace-relative or absolute path to the file"
             }
           },
-          "required": ["path"]
+          "required": [
+            "path"
+          ]
         },
-        "tags": ["file", "read"]
+        "tags": [
+          "file",
+          "read"
+        ]
       },
       {
         "name": "sfDebug_listDir",
@@ -121,9 +138,14 @@
               "description": "Workspace-relative or absolute directory path"
             }
           },
-          "required": ["path"]
+          "required": [
+            "path"
+          ]
         },
-        "tags": ["file", "directory"]
+        "tags": [
+          "file",
+          "directory"
+        ]
       }
     ],
     "viewsContainers": {
@@ -207,7 +229,7 @@
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
     "typescript": "^5.3.3",
-    "vsce": "^2.12.0"
+    "vsce": "^2.15.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
