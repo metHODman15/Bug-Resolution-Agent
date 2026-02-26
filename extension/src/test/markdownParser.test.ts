@@ -3,6 +3,7 @@ import {
     parseAgentsMd,
     parseCopilotInstructions,
     mergeConfigs,
+    HARDCODED_SYSTEM_POLICY,
 } from '../agent/markdownParser';
 
 suite('Markdown Parser Tests', () => {
@@ -197,7 +198,7 @@ Some instructions here.
             const merged = mergeConfigs(agents, instructions);
 
             // Hardcoded policy must come before AGENTS.md content
-            const policyIdx = merged.systemPrompt.indexOf('white-label build agent');
+            const policyIdx = merged.systemPrompt.indexOf(HARDCODED_SYSTEM_POLICY.substring(0, 30));
             const agentsIdx = merged.systemPrompt.indexOf('AGENTS.md');
             assert.ok(policyIdx < agentsIdx, 'Hardcoded policy must precede AGENTS.md');
         });
@@ -207,7 +208,7 @@ Some instructions here.
             const instructions = `# Copilot Instructions\n\nInstruction rules.\n`;
             const merged = mergeConfigs(agents, instructions);
 
-            const policyIdx = merged.systemPrompt.indexOf('white-label build agent');
+            const policyIdx = merged.systemPrompt.indexOf(HARDCODED_SYSTEM_POLICY.substring(0, 30));
             const agentsIdx = merged.systemPrompt.indexOf('Agent rules');
             const instrIdx  = merged.systemPrompt.indexOf('Instruction rules');
 

@@ -169,6 +169,7 @@ export class AgentWebviewProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'streamStart', id: msgId });
         this.busy = true;
 
+        let assistantAccum = '';
         try {
             const { updatedHistory } = await runAgentLoop(
                 key,
@@ -179,10 +180,7 @@ export class AgentWebviewProvider implements vscode.WebviewViewProvider {
                 wsRoot,
                 (chunk) => {
                     this.post({ type: 'streamChunk', id: msgId, text: chunk });
-                    // Track first assistant message for archive
-                    if (!this.firstAssistantMsg) {
-                        this.firstAssistantMsg = chunk;
-                    }
+                    assistantAccum += chunk;
                 },
                 (name, input) => {
                     const label = name === 'write_file'
@@ -197,6 +195,10 @@ export class AgentWebviewProvider implements vscode.WebviewViewProvider {
                 },
             );
             await this.memory.save(updatedHistory);
+            // Store first full assistant response for archive preview
+            if (!this.firstAssistantMsg && assistantAccum) {
+                this.firstAssistantMsg = assistantAccum;
+            }
             this.post({ type: 'streamEnd', id: msgId });
         } catch (e) {
             this.post({ type: 'streamEnd', id: msgId });

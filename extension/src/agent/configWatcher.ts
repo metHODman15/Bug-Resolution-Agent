@@ -95,12 +95,15 @@ export class ConfigWatcher implements vscode.Disposable {
     /* ── private ─────────────────────────────────────────────────────────────── */
 
     private setupWatchers(): void {
+        const wsFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!wsFolder) { return; }
+
         const agentsPattern = new vscode.RelativePattern(
-            vscode.workspace.workspaceFolders?.[0] ?? '',
+            wsFolder,
             AGENTS_PATH,
         );
         const instructionsPattern = new vscode.RelativePattern(
-            vscode.workspace.workspaceFolders?.[0] ?? '',
+            wsFolder,
             INSTRUCTIONS_PATH,
         );
 
